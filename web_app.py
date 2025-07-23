@@ -1,20 +1,177 @@
 #!/usr/bin/env python3
 """
-Image Comparison Tool - Web Interface
+Image Comparison Tool - Web Interface (Streamlit Cloud Compatible)
 
-Run with: streamlit run web_app.py
+Run with: streamlit run web_app_streamlit.py
 """
 
 import streamlit as st
 import numpy as np
-import cv2
 import os
 import tempfile
-from PIL import Image
+from PIL import Image, ImageChops, ImageEnhance
 import io
 import base64
-from comparator import ImageComparator
-import utils
+from skimage.metrics import structural_similarity as ssim
+from skimage import img_as_float
+from skimage.color import rgb2gray
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+
+
+def load_image_pil(image_path: str) -> np.ndarray:
+    """
+    Load an image using PIL and convert to numpy array.
+    
+    Args:
+        image_path (str): Path to the image file
+        
+    Returns:
+        np.ndarray: Loaded image as RGB numpy array
+    """
+    with Image.open(image_path) as img:
+        # Convert to RGB if necessary
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        return np.array(img)
+
+
+def resize_images_to_common_size_pil(image1: np.ndarray, image2: np.ndarray) -> tuple:
+    """
+    Resize two images to the smallest common dimensions using PIL.
+    
+    Args:
+        image1 (np.ndarray): First image
+        image2 (np.ndarray): Second image
+        
+    Returns:
+        tuple: Resized images
+    """
+    h1, w1 = image1.shape[:2]
+    h2, w2 = image2.shape[:2]
+    
+    # Find smallest common dimensions
+    min_height = min(h1, h2)
+    min_width = min(w1, w2)
+    
+    # Convert numpy arrays to PIL Images
+    pil_img1 = Image.fromarray(image1)
+    pil_img2 = Image.fromarray(image2)
+    
+    # Resize images
+    resized_img1 = pil_img1.resize((min_width, min_height), Image.Resampling.LANCZOS)
+    resized_img2 = pil_img2.resize((min_width, min_height), Image.Resampling.LANCZOS)
+    
+    # Convert back to numpy arrays
+    return np.array(resized_img1), np.array(resized_img2)
+
+
+def create_visual_diff_image_pil(image1: np.ndarray, image2: np.ndarray, diff_image: np.ndarray) -> np.ndarray:
+    """
+    Create a visual difference image highlighting changes between two images using PIL.
+    
+    Args:
+        image1 (np.ndarray): First image
+        image2 (np.ndarray): Second image
+        diff_image (np.ndarray): SSIM difference image
+        
+    Returns:
+        np.ndarray: Visual difference image with highlighted changes
+    """
+    # Convert diff image to proper format for visualization
+    diff_image = (diff_image * 255).astype(np.uint8)
+    
+    # Create a color-coded difference image
+    diff_colored = np.zeros((*diff_image.shape, 3), dtype=np.uint8)
+    
+    # Red channel for differences (higher values = more different)
+    diff_colored[:, :, 0] = diff_image  # Red channel
+    diff_colored[:, :, 1] = 0  # Green channel
+    diff_colored[:, :, 2] = 0  # Blue channel
+    
+    # Blend with original image for better visualization
+    alpha = 0.7
+    blended = (image1 * (1 - alpha) + diff_colored * alpha).astype(np.uint8)
+    
+    return blended
+
+
+def compare_images_streamlit(image1_path: str, image2_path: str) -> dict:
+    """
+    Compare two images using structural similarity (Streamlit Cloud compatible).
+    
+    Args:
+        image1_path (str): Path to first image
+        image2_path (str): Path to second image
+        
+    Returns:
+        dict: Comparison results
+    """
+    try:
+        # Load images using PIL
+        image1 = load_image_pil(image1_path)
+        image2 = load_image_pil(image2_path)
+        
+        # Resize images to common size
+        resized_image1, resized_image2 = resize_images_to_common_size_pil(image1, image2)
+        
+        # Convert to grayscale for SSIM comparison
+        gray_image1 = rgb2gray(img_as_float(resized_image1))
+        gray_image2 = rgb2gray(img_as_float(resized_image2))
+        
+        # Calculate structural similarity
+        similarity_score, diff_image = ssim(gray_image1, gray_image2, full=True)
+        
+        # Convert similarity score to percentage
+        similarity_percentage = similarity_score * 100
+        difference_percentage = 100 - similarity_percentage
+        
+        # Determine if images are exactly the same
+        are_identical = np.array_equal(gray_image1, gray_image2)
+        
+        # Create visual diff image
+        diff_image_visual = create_visual_diff_image_pil(resized_image1, resized_image2, diff_image)
+        
+        # Create side-by-side comparison
+        side_by_side = np.hstack([resized_image1, resized_image2])
+        
+        return {
+            'are_identical': are_identical,
+            'similarity_score': similarity_score,
+            'similarity_percentage': round(similarity_percentage, 2),
+            'difference_percentage': round(difference_percentage, 2),
+            'diff_image': diff_image_visual,
+            'side_by_side': side_by_side,
+            'original_shapes': {
+                'image1': image1.shape,
+                'image2': image2.shape
+            },
+            'resized_shapes': {
+                'image1': resized_image1.shape,
+                'image2': resized_image2.shape
+            }
+        }
+        
+    except Exception as e:
+        raise Exception(f"Error comparing images: {str(e)}")
+
+
+def save_image_to_bytes(image_array: np.ndarray) -> bytes:
+    """
+    Convert numpy array to bytes for download.
+    
+    Args:
+        image_array (np.ndarray): Image as numpy array
+        
+    Returns:
+        bytes: Image as bytes
+    """
+    pil_image = Image.fromarray(image_array)
+    img_byte_arr = io.BytesIO()
+    pil_image.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    return img_byte_arr.getvalue()
 
 
 def main():
@@ -123,8 +280,7 @@ def main():
         try:
             # Perform comparison
             with st.spinner("Comparing images..."):
-                comparator = ImageComparator()
-                results = comparator.compare_images(temp_path1, temp_path2, save_diff=False)
+                results = compare_images_streamlit(temp_path1, temp_path2)
             
             # Display results in columns
             col1, col2, col3, col4 = st.columns(4)
@@ -173,10 +329,7 @@ def main():
             
             # Side-by-side comparison
             st.subheader("🔄 Side-by-Side Comparison")
-            side_by_side = utils.create_side_by_side_comparison(
-                np.array(image1), np.array(image2)
-            )
-            st.image(side_by_side, caption="Original Images (Resized to Common Size)", use_column_width=True)
+            st.image(results['side_by_side'], caption="Original Images (Resized to Common Size)", use_column_width=True)
             
             # Visual difference image
             st.subheader("🔍 Visual Difference")
@@ -191,7 +344,7 @@ def main():
             with col1:
                 # Download difference image
                 if save_diff:
-                    diff_bytes = cv2.imencode('.png', cv2.cvtColor(diff_image, cv2.COLOR_RGB2BGR))[1].tobytes()
+                    diff_bytes = save_image_to_bytes(results['diff_image'])
                     st.download_button(
                         label="📥 Download Difference Image",
                         data=diff_bytes,
@@ -253,7 +406,7 @@ Analysis:
     st.markdown(
         """
         <div style='text-align: center; color: #666;'>
-        <p>Built with ❤️ using Streamlit, OpenCV, and scikit-image</p>
+        <p>Built with ❤️ using Streamlit, PIL, and scikit-image</p>
         <p>For CLI usage: <code>python main.py image1.jpg image2.jpg</code></p>
         </div>
         """,

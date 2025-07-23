@@ -242,7 +242,7 @@ def main():
         if uploaded_file1 is not None:
             # Display first image
             image1 = Image.open(uploaded_file1)
-            st.image(image1, caption="First Image", use_column_width=True)
+            st.image(image1, caption="First Image", use_container_width=True)
             
             # Show image info
             st.info(f"**Image 1 Info:** {image1.size[0]}x{image1.size[1]} pixels, {image1.mode} mode")
@@ -258,7 +258,7 @@ def main():
         if uploaded_file2 is not None:
             # Display second image
             image2 = Image.open(uploaded_file2)
-            st.image(image2, caption="Second Image", use_column_width=True)
+            st.image(image2, caption="Second Image", use_container_width=True)
             
             # Show image info
             st.info(f"**Image 2 Info:** {image2.size[0]}x{image2.size[1]} pixels, {image2.mode} mode")
@@ -329,12 +329,12 @@ def main():
             
             # Side-by-side comparison
             st.subheader("🔄 Side-by-Side Comparison")
-            st.image(results['side_by_side'], caption="Original Images (Resized to Common Size)", use_column_width=True)
+            st.image(results['side_by_side'], caption="Original Images (Resized to Common Size)", use_container_width=True)
             
             # Visual difference image
             st.subheader("🔍 Visual Difference")
             diff_image = results['diff_image']
-            st.image(diff_image, caption="Highlighted Differences (Red areas show changes)", use_column_width=True)
+            st.image(diff_image, caption="Highlighted Differences (Red areas show changes)", use_container_width=True)
             
             # Download section
             st.subheader("💾 Download Results")

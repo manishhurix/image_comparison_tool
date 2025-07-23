@@ -121,7 +121,7 @@ def compare_images_streamlit(image1_path: str, image2_path: str) -> dict:
         gray_image2 = rgb2gray(img_as_float(resized_image2))
         
         # Calculate structural similarity
-        similarity_score, diff_image = ssim(gray_image1, gray_image2, full=True)
+        similarity_score, diff_image = ssim(gray_image1, gray_image2, full=True, data_range=1.0)
         
         # Convert similarity score to percentage
         similarity_percentage = similarity_score * 100

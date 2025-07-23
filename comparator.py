@@ -44,7 +44,7 @@ class ImageComparator:
             gray_image2 = utils.convert_to_grayscale(resized_image2)
             
             # Calculate structural similarity
-            similarity_score, diff_image = ssim(gray_image1, gray_image2, full=True)
+            similarity_score, diff_image = ssim(gray_image1, gray_image2, full=True, data_range=1.0)
             
             # Convert similarity score to percentage
             similarity_percentage = similarity_score * 100
